@@ -1,0 +1,170 @@
+---
+
+title: "Phishing Email Detection Analysis Report" author: "" date: "`r Sys.Date()`" output: html\_document: toc: true toc\_depth: 3 theme: flatly highlight: tango fig\_caption: true df\_print: paged
+
+```{r
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 6,
+  fig.height = 4
+)
+# Load necessary libraries
+library(DBI)
+library(RSQLite)
+library(dplyr)
+library(readr)
+library(caret)
+library(pROC)
+library(ggplot2)
+
+# Source database connection helper
+source("R/database_connect.R")
+```
+
+# 1 Data Import and Initial Inspection
+
+```{r
+# Connect to SQLite database
+ db_path <- "data/phishing_email.sqlite"
+ con     <- connect_to_db(db_path)
+
+# Read the 'emails' table
+ emails <- dbReadTable(con, "emails")
+
+# Display the first few rows
+ head(emails)
+
+# Disconnect from the database
+ dbDisconnect(con)
+```
+
+# 2 Exploratory SQL Queries
+
+```{r
+# Reconnect to the database
+con <- connect_to_db(db_path)
+
+# Query total emails and number of phishing emails
+total_count <- dbGetQuery(con, "
+  SELECT
+    COUNT(*) AS total_emails,
+    SUM(label) AS spam_emails
+  FROM emails;")
+print(total_count)
+
+# Count emails containing the keyword 'xls'
+xls_count <- dbGetQuery(con, "
+  SELECT
+    SUM(CASE WHEN text_combined LIKE '%xls%' THEN 1 ELSE 0 END) AS xls_count
+  FROM emails;")
+print(xls_count)
+
+# Disconnect from the database
+ dbDisconnect(con)
+```
+
+# 3 Feature Engineering
+
+```{r
+# Load feature dataset
+features <- read_csv("data/features.csv")
+
+# Show a preview of the features
+head(features)
+```
+
+# 4 Model Training and Evaluation
+
+```{r
+# Split data into training (80%) and test (20%) sets
+set.seed(123)
+idx      <- createDataPartition(features$label, p = 0.8, list = FALSE)
+train_df <- features[idx, ]
+test_df  <- features[-idx, ]
+
+# Train logistic regression model with probability predictions enabled
+ctrl <- trainControl(method = "none", classProbs = TRUE)
+model <- train(
+  label ~ . - id,
+  data      = train_df,
+  method    = "glm",
+  family    = binomial(),
+  trControl = ctrl
+)
+
+# Print model summary
+print(model)
+
+# Predict probabilities and classes on the test set
+probs <- predict(model, test_df, type = "prob")[, "spam"]
+preds <- factor(ifelse(probs > 0.5, "spam", "ham"), levels = c("ham", "spam"))
+
+# Compute and display the confusion matrix
+cm <- confusionMatrix(preds, test_df$label, positive = "spam")
+print(cm)
+
+# Compute and display ROC AUC
+roc_obj <- roc(test_df$label, probs, levels = c("ham", "spam"))
+auc_val <- auc(roc_obj)
+cat("Test ROC AUC:", round(auc_val, 3), "\n")
+```
+
+# 5 Visualization
+
+```{r
+# Prepare ROC curve data frame
+roc_df <- data.frame(
+  FPR = 1 - roc_obj$specificities,
+  TPR = roc_obj$sensitivities
+)
+
+# Plot ROC curve
+ggplot(roc_df, aes(x = FPR, y = TPR)) +
+  geom_line(size = 1) +
+  geom_abline(linetype = "dashed") +
+  labs(
+    title = "ROC Curve",
+    x     = "False Positive Rate (FPR)",
+    y     = "True Positive Rate (TPR)"
+  )
+```
+
+```{r
+# Prepare confusion matrix for heatmap
+cm_df <- as.data.frame(cm$table)
+
+# Plot confusion matrix heatmap
+ggplot(cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq), color = "white", size = 6) +
+  labs(
+    title = "Confusion Matrix Heatmap",
+    x     = "Actual Label",
+    y     = "Predicted Label"
+  )
+```
+
+# 6 Conclusions and Next Steps
+
+In this analysis, the logistic regression model achieved on the test set:
+
+- **Accuracy**: `r round(cm$overall["Accuracy"], 3)`
+- **Sensitivity (Recall)**: `r round(cm$byClass["Sensitivity"], 3)`
+- **Specificity**: `r round(cm$byClass["Specificity"], 3)`
+- **ROC AUC**: `r round(auc_val, 3)`
+
+> **Summary**: The model successfully identifies the majority of phishing emails but has a high false positive rate. Future improvements could include threshold optimization, additional text/metadata features, or using advanced algorithms such as Random Forest or XGBoost.
+
+# 7 Practical Implications
+
+This project demonstrates a reproducible end-to-end workflow, offering:
+
+1. **Automated Threat Detection**: Can be integrated into email servers or security platforms for real-time phishing detection.
+2. **Extensible Feature Set**: Modular feature extraction allows quick addition of URL analysis, attachment metadata, or advanced NLP features.
+3. **Reproducible Deployment**: Lightweight R scripts and SQLite make it easy to containerize (e.g., using Docker) and automate via CI/CD.
+4. **Insightful Reporting**: Generates self-contained HTML/PDF reports for stakeholders to review model performance and improvement strategies.
+
+These components form a solid foundation for enterprise email security solutions.
+
