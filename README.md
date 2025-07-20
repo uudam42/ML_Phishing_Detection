@@ -79,6 +79,8 @@ After each script, check the generated file in `data/` or `result/`.
 - **Feature table**: `data/features.csv`
 - **Trained model**: `data/logistic_model.rds`
 - **Plots**: `result/roc_curve.png`, `result/confusion_matrix.png`
+- ![confusion_matrix](https://github.com/user-attachments/assets/d2a2fc0e-af93-4801-8ee7-d34ec87bf395)
+
 - **Full report**: `phishing_report.Rmd`
 
 ---
