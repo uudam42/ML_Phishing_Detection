@@ -80,7 +80,7 @@ After each script, check the generated file in `data/` or `result/`.
 - **Trained model**: `data/logistic_model.rds`
 - **Plots**: `result/roc_curve.png`, `result/confusion_matrix.png`
 - ![confusion_matrix](https://github.com/user-attachments/assets/d2a2fc0e-af93-4801-8ee7-d34ec87bf395)
-
+- ![ROC_curve](https://github.com/user-attachments/assets/cc29c088-e84b-4583-8944-be8b12ee9847)
 - **Full report**: `phishing_report.Rmd`
 
 ---
